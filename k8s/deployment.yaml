@@ -1,16 +1,37 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-name: spring-application-config
+  name: spring-application-config
+  annotations:
+    kapp.k14s.io/versioned: ""
 data:
   application.yml: |
+    debug: true
+    logging:
+      level:
+        org.springframework.boot.actuate: TRACE
+    management:
+      endpoint:
+        gateway:
+          enabled: true
+      endpoints:
+        web:
+          exposure:
+            include: health,info,gateway
     spring:
       cloud:
         gateway:
           routes:
-          - id: remote_service
-            uri: http://httpstat.us/500
-            
+          - id: simple_get
+            uri: http://httpbin.org:80
+            predicates:
+            - Path=/get/*
+          - id: circuit_breaker
+            uri: http://httpbin.org:80
+            predicates:
+            - Host=*.circuitbreaker.com
+            filters:
+            - CircuitBreaker=circuitBreaker
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -40,6 +61,26 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+        # livenessProbe:
+        #   httpGet:
+        #     path: /actuator/health
+        #     port: 8080
+        #   failureThreshold: 3
+        #   periodSeconds: 10
+        # readinessProbe:
+        #   httpGet:
+        #     path: /actuator/health/readiness
+        #     port: 8080
+        #   failureThreshold: 5
+        #   periodSeconds: 1
+        #   initialDelaySeconds: 2
+      #   volumeMounts:
+      #   - name: config-volume
+      #     mountPath: /workspace/config
+      # volumes:
+      # - name: config-volume
+      #   configMap:
+      #     name: spring-application-config
 ---
 apiVersion: v1
 kind: Service
@@ -54,3 +95,15 @@ spec:
     targetPort: 8080
   selector:
     app: api-gateway
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: api-gateway
+spec:
+  virtualhost:
+    fqdn: gateway.apps.eqix.vmwedge.com
+  routes:
+  - services:
+    - name: api-gateway
+      port: 8080
