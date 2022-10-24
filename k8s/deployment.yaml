@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+name: spring-application-config
+data:
+  application.yml: |
+    spring:
+      cloud:
+        gateway:
+          routes:
+          - id: remote_service
+            uri: http://httpstat.us/500
+            
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: api-gateway
+  name: api-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+      - image: harbor.eqix.vmwedge.com/api-gateway/api-gateway:latest
+        name: api-gateway
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: api-gateway
+  name: api-gateway
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: api-gateway
